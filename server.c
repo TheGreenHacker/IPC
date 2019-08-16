@@ -183,11 +183,10 @@ void signal_handler(int signal_num)
 {
     if(signal_num == SIGINT)
     {
-        //printf("Invoked signal handler\n");
         int i, ready_to_update = 0, loop = 0;
         sync_msg_t sync_msg;
-        sync_msg.op_code = SHUTDOWN;
-        for(i = 0; i < MAX_CLIENTS; i++){
+        sync_msg.op_code = DUMMY;
+        for(i = 2; i < MAX_CLIENTS; i++){
             int comm_socket_fd = monitored_fd_set[i];
             if (comm_socket_fd != -1) {
                 write(comm_socket_fd, &sync_msg, sizeof(sync_msg_t));
@@ -197,9 +196,11 @@ void signal_handler(int signal_num)
         }
         
         /* Clean up resources */
+        /*
         while (routing_table->head) {
             del(routing_table, routing_table->head->contents->dest, routing_table->head->contents->mask);
         }
+         */
         
         free(routing_table);
         close(connection_socket);
@@ -261,9 +262,11 @@ int main() {
     
     /* The server continuously checks for new client connections, monitors existing connections (i.e. incoming messages and inactive connections, modifies the routing table if need be, and broadcasts any changes to all client processes. */
     routing_table = calloc(1, sizeof(routing_table_t));
+    init_routing_table(routing_table);
     while (1) {
         char operation[OP_LEN];
         sync_msg_t sync_msg;
+        memset(&sync_msg, 0, sizeof(sync_msg_t));
         
         ready_to_update = 0;
 
@@ -274,7 +277,7 @@ int main() {
         printf("Select...\n");
         
         select(get_max_fd() + 1, &readfds, NULL, NULL, NULL);  /* Wait for incoming connections. */
-        
+
         /* New client connection: send entire table state to newly connected client. */
         if(FD_ISSET(connection_socket, &readfds)){
             printf("Got a client\n");
@@ -287,25 +290,29 @@ int main() {
             add_to_monitored_fd_set(data_socket);
             
             routing_table_entry_t *entry = routing_table->head;
-            while (entry) {
+            while (entry->contents->mask != DUMMY_MASK) {
                 printf("Entry...\n");
-                
+    
+                sync_msg.op_code = CREATE;
                 sprintf(operation, "C %s %u %s %s", entry->contents->dest, entry->contents->mask, entry->contents->gw, entry->contents->oif);
                 create_sync_message(operation, &sync_msg);
                 write(data_socket, &sync_msg, sizeof(sync_msg_t));
-                if (!entry->next) {
-                    ready_to_update = 1;
-                }
                 write(data_socket, &ready_to_update, sizeof(int));
                 write(data_socket, &loop, sizeof(int));
                 
                 entry = entry->next;
             }
+            ready_to_update = 1;
+            
+            sync_msg.op_code = DUMMY;
+            write(data_socket, &sync_msg, sizeof(sync_msg_t));
+            write(data_socket, &ready_to_update, sizeof(int));
+            write(data_socket, &loop, sizeof(int));
         }
         else if(FD_ISSET(0, &readfds)){ // update from routing table manager via stdin
             printf("Manager has some changes to make\n");
             ret = read(0, operation, OP_LEN - 1);
-            //operation[strcspn(operation, "\r\n")] = 0; // flush new line
+            operation[strcspn(operation, "\r\n")] = 0; // flush new line
             if (ret == -1) {
                 perror("read");
                 return 1;
@@ -329,14 +336,16 @@ int main() {
                     if (comm_socket_fd != -1) {
                         write(comm_socket_fd, &sync_msg, sizeof(sync_msg));
                         write(comm_socket_fd, &ready_to_update, sizeof(int));
-                        write(data_socket, &loop, sizeof(int));
+                        write(comm_socket_fd, &loop, sizeof(int));
                     }
                 }
             }
         }
         else { /* Check active status of clients */
+            printf("Client activity detected\n");
             int i;
             for(i = 2; i < MAX_CLIENTS; i++){
+                printf("is fd set?\n");
                 if(FD_ISSET(monitored_fd_set[i], &readfds)){
                     int done;
                     int comm_socket_fd = monitored_fd_set[i];
@@ -349,6 +358,9 @@ int main() {
                     else if (ret == -1) {
                         perror("read");
                         exit(1);
+                    }
+                    else {
+                        printf("%i\n", done);
                     }
                 }
             }

@@ -49,12 +49,13 @@ int main() {
     }
     
     routing_table = calloc(1, sizeof(routing_table_t));
+    init_routing_table(routing_table);
     
     signal(SIGINT, signal_handler);  //register signal handler
     
     /* Continously wait for updates from the routing manager server regarding table contents, stability of
      updates to the table, and server status. */
-    while (1) {
+    while (loop) {
         sync_msg_t sync_msg;
         
         printf("Waiting for sync mesg\n");

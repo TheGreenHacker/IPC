@@ -4,6 +4,9 @@
 #define IP_ADDR_LEN 16
 #define OIF_LEN 32
 #define SOCKET_NAME "RTMSocket"
+#define DUMMY_MASK 33
+
+#include <stdlib.h>
 
 /* Data structures to model routing table and operations */
 
@@ -11,7 +14,7 @@ typedef enum {
     CREATE,
     UPDATE,
     DELETE,
-    SHUTDOWN
+    DUMMY
 } OPCODE;
 
 typedef struct _contents {
@@ -36,11 +39,11 @@ typedef struct routing_table_{
     routing_table_entry_t *head;
 } routing_table_t;
 
-void insert(routing_table_t *table, const char *dest, unsigned short mask, const char *gw,  const char *oif);
-void update(routing_table_t *table, const char *dest, unsigned short mask, const char *gw, const char *oif);
-void del(routing_table_t *table, const char *dest, unsigned short mask);
+/* Public API's for routing table functionality */
+void init_routing_table(routing_table_t *table); // inits a routing table with a dummy head entry
 void display(const routing_table_t *table);
-
 void process_sync_mesg(routing_table_t *table, const sync_msg_t *sync_msg);
+
+extern routing_table_entry_t *dummy_entry;
 
 #endif

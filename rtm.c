@@ -80,6 +80,12 @@ void process_sync_mesg(routing_table_t *table, const sync_msg_t *sync_msg) {
     switch (sync_msg->op_code) {
         case CREATE:
             insert(table, sync_msg->contents.dest, sync_msg->contents.mask, sync_msg->contents.gw, sync_msg->contents.oif);
+            /*
+            printf("%s\n", sync_msg->contents.dest);
+            printf("%u\n", sync_msg->contents.mask);
+            printf("%s\n", sync_msg->contents.gw);
+            printf("%s\n", sync_msg->contents.oif);
+             */
             break;
         case UPDATE:
             update(table, sync_msg->contents.dest, sync_msg->contents.mask, sync_msg->contents.gw, sync_msg->contents.oif);

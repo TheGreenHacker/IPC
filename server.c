@@ -55,6 +55,13 @@ static void remove_from_monitored_fd_set(int skt_fd){
     }
 }
 
+static void print_monitored_fd_set() {
+    int i = 0;
+    for (; i < MAX_CLIENTS; i++) {
+        printf("fd #%i: %i\n", i, monitored_fd_set[i]);
+    }
+}
+
 
 /* Clone all the FDs in monitored_fd_set array into
  * fd_set Data structure*/
@@ -298,23 +305,27 @@ int main() {
         else if(FD_ISSET(0, &readfds)){ // update from routing table manager via stdin
             printf("Manager has some changes to make\n");
             ret = read(0, operation, OP_LEN - 1);
+            //operation[strcspn(operation, "\r\n")] = 0; // flush new line
             if (ret == -1) {
                 perror("read");
                 return 1;
             }
             operation[ret] = 0;
             
-            printf("Operation : %s\n", operation);
+            //printf("Operation : %s\n", operation);
+            
+            //print_monitored_fd_set();
             
             if (!create_sync_message(operation, &sync_msg)) {
-                printf("about to notify clients\n");
+                //print_monitored_fd_set();
                 process_sync_mesg(routing_table, &sync_msg); // update server's table
-                
+                //print_monitored_fd_set();
                 /* Notify existing clients of changes */
                 int i, comm_socket_fd;
                 ready_to_update = 1;
-                for (i = 0; i < MAX_CLIENTS; i++) {
+                for (i = 2; i < MAX_CLIENTS; i++) {
                     comm_socket_fd = monitored_fd_set[i];
+                    //printf("%i\n", comm_socket_fd);
                     if (comm_socket_fd != -1) {
                         write(comm_socket_fd, &sync_msg, sizeof(sync_msg));
                         write(comm_socket_fd, &ready_to_update, sizeof(int));
@@ -325,7 +336,7 @@ int main() {
         }
         else { /* Check active status of clients */
             int i;
-            for(i = 0; i < MAX_CLIENTS; i++){
+            for(i = 2; i < MAX_CLIENTS; i++){
                 if(FD_ISSET(monitored_fd_set[i], &readfds)){
                     int done;
                     int comm_socket_fd = monitored_fd_set[i];

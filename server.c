@@ -55,13 +55,6 @@ static void remove_from_monitored_fd_set(int skt_fd){
     }
 }
 
-static void print_monitored_fd_set() {
-    int i = 0;
-    for (; i < MAX_CLIENTS; i++) {
-        printf("fd #%i: %i\n", i, monitored_fd_set[i]);
-    }
-}
-
 
 /* Clone all the FDs in monitored_fd_set array into
  * fd_set Data structure*/
@@ -88,7 +81,7 @@ int digits_only(const char *s)
 
 static int isValidIP(const char *addr) {
     struct sockaddr_in sa;
-    return inet_pton(AF_INET, addr, &(sa.sin_addr)) != 0;
+    return addr && inet_pton(AF_INET, addr, &(sa.sin_addr)) != 0;
 }
 
 
@@ -196,12 +189,7 @@ void signal_handler(int signal_num)
         }
         
         /* Clean up resources */
-        /*
-        while (routing_table->head) {
-            del(routing_table, routing_table->head->contents->dest, routing_table->head->contents->mask);
-        }
-         */
-        
+        deinit_routing_table(routing_table);
         free(routing_table);
         close(connection_socket);
         remove_from_monitored_fd_set(connection_socket);

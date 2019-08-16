@@ -101,3 +101,11 @@ void process_sync_mesg(routing_table_t *table, const sync_msg_t *sync_msg) {
             break;
     }
 }
+
+
+
+void deinit_routing_table(routing_table_t *table) {
+    while (table->head){
+        del(table, table->head);
+    }
+}

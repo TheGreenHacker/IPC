@@ -40,10 +40,9 @@ typedef struct routing_table_{
 } routing_table_t;
 
 /* Public API's for routing table functionality */
-void init_routing_table(routing_table_t *table); // inits a routing table with a dummy head entry
+void init_routing_table(routing_table_t *table);
 void display(const routing_table_t *table);
 void process_sync_mesg(routing_table_t *table, const sync_msg_t *sync_msg);
-
-extern routing_table_entry_t *dummy_entry;
+void deinit_routing_table(routing_table_t *table);
 
 #endif

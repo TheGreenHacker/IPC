@@ -7,20 +7,16 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <arpa/inet.h>
-//#include <pthread.h>
+#include <signal.h>
 
-#include "RoutingTable/RoutingTable.h"
-#include "sync.h"
+#include "rtm.h"
 
 #define MAX_CLIENTS 32
-#define BUFFER_SIZE 32
+#define OP_LEN 128
+#define MAX_MASK 32
 
-char dest[16];
-char mask[4];
-char gw[16];
-char oif[32];
-char dest_mask[20];
-
+int connection_socket;
+int loop = 1;
 routing_table_t *routing_table;
 
 /*An array of File descriptors which the server process
@@ -91,8 +87,7 @@ static int isValidIP(const char *addr) {
 
 /* Mask is valid if it begins with a /, the rest of the string following the / contains only digits, and the numerical value of the rest of the string is between 0 and 32, inclusive. */
 static int isValidMask(const char *mask) {
-    int int_mask = atoi(mask);
-    return mask[0] == '/' && int_mask >= 0 && int_mask <= 32 && digits_only(&mask[1]);
+    return digits_only(mask) && atoi(mask) <= 32;
 }
 
 /*Get the numerical max value among all FDs which server
@@ -110,50 +105,100 @@ static int get_max_fd(){
 }
 
 
-/* Prompt routing table manager to fill in the fields for a sync msg body, validating the inputs along the way. */
-static void prepare_entry(char op) {
-    if (op == 'c' || op == 'u' || op == 'd') {
-        do {
-            printf("Destination network: \n");
-            fgets(dest, sizeof(dest), stdin);
-            dest[strcspn(dest, "\r\n")] = 0; // to flush newline from previous stdin
-            /*
-            printf("The destination you entered is %s\n", dest);
-            if (!isValidIP(dest)) {
-                printf("You entered an invalid destination IP\n");
-            }
-            else {
-                printf("fucking input streams...\n");
-            }
-            
-            if (isValidIP("122.1.1.1")) {
-                printf("WTFFFFF\n");
-            }
-            else {
-                printf("ohhhh\n");
-            }
-             */
-            memcpy(dest_mask, dest, strlen(dest));
-        } while (!isValidIP(dest));
-        
-        do {
-            printf("Mask: \n");
-            fgets(mask, sizeof(mask), stdin);
-            mask[strcspn(mask, "\r\n")] = 0; // to flush newline from previous stdin
-            memcpy(dest_mask + strlen(dest), mask, strlen(mask));
-        } while (!isValidMask(mask));
-        
-        if (op != 'd') { // Gateway IP and OIF inquiries only necessary for INSERT AND UPDATE
-            do {
-                printf("Gateway IP: \n");
-                fgets(gw, sizeof(gw), stdin);
-                gw[strcspn(gw, "\r\n")] = 0; // to flush newline from previous stdin
-            } while (!isValidIP(gw));
-            
-            printf("OIF: \n");
-            fgets(oif, sizeof(oif), stdin);
-            oif[strcspn(oif, "\r\n")] = 0; // to flush newline from previous stdin
+/* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> with each field separated by a space, from the routing table manager to create a sync message for clients, instructing them on how to update their copies of the routing table. */
+static int create_sync_message(char *operation, sync_msg_t *sync_msg) {
+    char *token = strtok(operation, " ");
+    if (token) {
+        switch (token[0]) {
+            case 'C':
+                sync_msg->op_code = CREATE;
+                break;
+            case 'U':
+                sync_msg->op_code = UPDATE;
+                break;
+            case 'D':
+                sync_msg->op_code = DELETE;
+                break;
+            default:
+                fprintf(stderr, "Invalid operation: unknown op code\n");
+                return -1;
         }
+    }
+    else {
+        fprintf(stderr, "Invalid operation: missing op code\n");
+        return -1;
+    }
+    
+    token = strtok(NULL, " ");
+    if (isValidIP(token)) {
+        memcpy(sync_msg->contents.dest, token, strlen(token));
+    }
+    else {
+        fprintf(stderr, "Invalid operation: invalid or missing destination IP\n");
+        return -1;
+    }
+    
+    token = strtok(NULL, " ");
+    if (isValidMask(token)) {
+        sync_msg->contents.mask = atoi(token);
+    }
+    else {
+        fprintf(stderr, "Invalid operation: invalid or missing subnet mask value\n");
+        return -1;
+    }
+    
+    /* Only CREATE and UPDATE require a gw and oif*/
+    if (sync_msg->op_code == CREATE || sync_msg->op_code == UPDATE) {
+        token = strtok(NULL, " ");
+        if (isValidIP(token)) {
+            memcpy(sync_msg->contents.gw, token, strlen(token));
+        }
+        else {
+            fprintf(stderr, "Invalid operation: invalid or missing gateway IP\n");
+            return -1;
+        }
+        
+        token = strtok(NULL, " ");
+        if (token) {
+            memcpy(sync_msg->contents.oif, token, strlen(token));
+        }
+        else {
+            fprintf(stderr, "Invalid operation: missing OIF\n");
+            return -1;
+        }
+    }
+    
+    return 0;
+}
+
+/* Break out of main infinite loop and inform clients of shutdown to exit cleanly. */
+void signal_handler(int signal_num)
+{
+    if(signal_num == SIGINT)
+    {
+        //printf("Invoked signal handler\n");
+        int i, ready_to_update = 0, loop = 0;
+        sync_msg_t sync_msg;
+        sync_msg.op_code = SHUTDOWN;
+        for(i = 0; i < MAX_CLIENTS; i++){
+            int comm_socket_fd = monitored_fd_set[i];
+            if (comm_socket_fd != -1) {
+                write(comm_socket_fd, &sync_msg, sizeof(sync_msg_t));
+                write(comm_socket_fd, &ready_to_update, sizeof(int));
+                write(comm_socket_fd, &loop, sizeof(int));
+            }
+        }
+        
+        /* Clean up resources */
+        while (routing_table->head) {
+            del(routing_table, routing_table->head->contents->dest, routing_table->head->contents->mask);
+        }
+        
+        free(routing_table);
+        close(connection_socket);
+        remove_from_monitored_fd_set(connection_socket);
+        unlink(SOCKET_NAME);
+        exit(0);
     }
 }
 
@@ -161,16 +206,12 @@ static void prepare_entry(char op) {
 int main() {
     struct sockaddr_un name;
     int ret;
-    int connection_socket;
     int data_socket;
-    int flag = 1;  // if received, client is done else server has sent all current updates
+    int ready_to_update;  // indicates to client if current table state is stable
     fd_set readfds;
     
-    /*
-    printf("%i \n", isValidIP("122.1.1.1"));
-    exit(0);
-    */
     intitiaze_monitor_fd_set();
+    add_to_monitored_fd_set(0);
     
     /*In case the program exited inadvertently on the last run,
      *remove the socket.
@@ -209,70 +250,19 @@ int main() {
     
     add_to_monitored_fd_set(connection_socket);
     
+    signal(SIGINT, signal_handler);  //register signal handlers
+    
     /* The server continuously checks for new client connections, monitors existing connections (i.e. incoming messages and inactive connections, modifies the routing table if need be, and broadcasts any changes to all client processes. */
     routing_table = calloc(1, sizeof(routing_table_t));
-    for (;;) {
-        char c, ch;
+    while (1) {
+        char operation[OP_LEN];
         sync_msg_t sync_msg;
         
-        /* Prompt routing table manager to make changes */
-        printf("Select from the following options\n");
-        printf("1.CREATE (c)\n");
-        printf("2.UPDATE (u)\n");
-        printf("3.DELETE (d)\n");
-        
-        c = getchar();
-        scanf("%c",&ch);  // flush newline
-        prepare_entry(c);
-        
-        /* Update server's copy of routing table */
-        switch (c) {
-            case 'c':
-                sync_msg.op_code = CREATE;
-                insert(routing_table, dest_mask, gw, oif);
-                break;
-            case 'u':
-                sync_msg.op_code = UPDATE;
-                update(routing_table, dest_mask, gw, oif);
-                break;
-            case 'd':
-                sync_msg.op_code = DELETE;
-                del(routing_table, dest_mask);
-                break;
-            default:
-                printf("Invalid operation. No changes made.\n");
-                break;
-        }
-        
-        printf("Display updated table? (y/n)\n");
-        
-        c = getchar();
-        if (c == 'y') {
-            display(routing_table);
-        }
-        scanf("%c",&ch);  // flush newline
-        
-        printf("Preparing sync message\n");
-        
-        /* Prepare sync message */
-        memcpy(sync_msg.msg_body.dest, dest, strlen(dest));
-        memcpy(sync_msg.msg_body.mask, mask, strlen(mask));
-        memcpy(sync_msg.msg_body.gw, gw, strlen(gw));
-        memcpy(sync_msg.msg_body.oif, oif, strlen(oif));
-        
-        printf("Notifying clients\n");
-        
-        /* Notify existing clients of changes */
-        int i, comm_socket_fd;
-        for (i = 0; i < MAX_CLIENTS; i++) {
-            comm_socket_fd = monitored_fd_set[i];
-            if (comm_socket_fd != -1) {
-                write(comm_socket_fd, &sync_msg, sizeof(sync_msg));
-                write(comm_socket_fd, &flag, sizeof(int));
-            }
-        }
-        
+        ready_to_update = 0;
+
         refresh_fd_set(&readfds); /*Copy the entire monitored FDs to readfds*/
+        
+        display(routing_table);
         
         printf("Select...\n");
         
@@ -289,35 +279,59 @@ int main() {
             
             add_to_monitored_fd_set(data_socket);
             
-            routing_table_entry_t *head = routing_table->head;
-            while (head) {
+            routing_table_entry_t *entry = routing_table->head;
+            while (entry) {
                 printf("Entry...\n");
-                memset(&sync_msg, 0, sizeof(sync_msg_t));
                 
-                sync_msg.op_code = CREATE;
-                
-                char *slash_pos = strchr(head->dest_mask, '/');
-                
-                memcpy(sync_msg.msg_body.dest, head->dest_mask, slash_pos - head->dest_mask);
-                memcpy(sync_msg.msg_body.mask, slash_pos, strlen(slash_pos));
-                memcpy(sync_msg.msg_body.gw, head->gw, strlen(head->gw));
-                memcpy(sync_msg.msg_body.oif, head->oif, strlen(head->oif));
-                
+                sprintf(operation, "C %s %u %s %s", entry->contents->dest, entry->contents->mask, entry->contents->gw, entry->contents->oif);
+                create_sync_message(operation, &sync_msg);
                 write(data_socket, &sync_msg, sizeof(sync_msg_t));
+                if (!entry->next) {
+                    ready_to_update = 1;
+                }
+                write(data_socket, &ready_to_update, sizeof(int));
+                write(data_socket, &loop, sizeof(int));
                 
-                head = head->next;
+                entry = entry->next;
             }
-            printf("Client: %i\n", data_socket);
-            printf("Flag is %i\n", flag);
-            write(data_socket, &flag, sizeof(int));
         }
-        else { /* There might be a client who wants to disconnect */
+        else if(FD_ISSET(0, &readfds)){ // update from routing table manager via stdin
+            printf("Manager has some changes to make\n");
+            ret = read(0, operation, OP_LEN - 1);
+            if (ret == -1) {
+                perror("read");
+                return 1;
+            }
+            operation[ret] = 0;
+            
+            printf("Operation : %s\n", operation);
+            
+            if (!create_sync_message(operation, &sync_msg)) {
+                printf("about to notify clients\n");
+                process_sync_mesg(routing_table, &sync_msg); // update server's table
+                
+                /* Notify existing clients of changes */
+                int i, comm_socket_fd;
+                ready_to_update = 1;
+                for (i = 0; i < MAX_CLIENTS; i++) {
+                    comm_socket_fd = monitored_fd_set[i];
+                    if (comm_socket_fd != -1) {
+                        write(comm_socket_fd, &sync_msg, sizeof(sync_msg));
+                        write(comm_socket_fd, &ready_to_update, sizeof(int));
+                        write(data_socket, &loop, sizeof(int));
+                    }
+                }
+            }
+        }
+        else { /* Check active status of clients */
+            int i;
             for(i = 0; i < MAX_CLIENTS; i++){
                 if(FD_ISSET(monitored_fd_set[i], &readfds)){
-                    comm_socket_fd = monitored_fd_set[i];
+                    int done;
+                    int comm_socket_fd = monitored_fd_set[i];
                     
-                    ret = read(comm_socket_fd, &flag, sizeof(int));
-                    if (flag == 0) {
+                    ret = read(comm_socket_fd, &done, sizeof(int));
+                    if (done == 1) {
                         close(comm_socket_fd);
                         remove_from_monitored_fd_set(comm_socket_fd);
                     }
@@ -329,10 +343,5 @@ int main() {
             }
         }
     }
-    
-    /* Clean up resources */
-    close(connection_socket);
-    remove_from_monitored_fd_set(connection_socket);
-    unlink(SOCKET_NAME);
     exit(0);
 }

@@ -5,20 +5,31 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <signal.h>
 
-#include "RoutingTable/RoutingTable.h"
-#include "sync.h"
+#include "rtm.h"
+
+int data_socket;
+int loop = 1;
+int disconnect = 1;
+
+/* Break out of main infinite loop and inform server of intent to disconnect. */
+void signal_handler(int signal_num)
+{
+    if(signal_num == SIGINT)
+    {
+        loop = 0;
+        write(data_socket, &disconnect, sizeof(int));
+        close(data_socket);
+        exit(0);
+    }
+}
 
 int main() {
     struct sockaddr_un addr;
     routing_table_t *routing_table;
     int ret;
-    int data_socket;
-    int flag;  // indicates to server if client is still connected or not or if server is done sending all current updates
-    char conn;  // does client still want to remain connected to server?
-    char flush; // flush newline from each stdin operation
-    char dest_mask[20];
-    sync_msg_t sync_msg;
+    int ready_to_update;  // indicates if current state of table is stable
     
     data_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (data_socket == -1) {
@@ -39,71 +50,39 @@ int main() {
     
     routing_table = calloc(1, sizeof(routing_table_t));
     
-    /* Continously wait for updates from the routing manager server and update copy of routing table accordingly. */
-    do {
-        printf("About to read from server\n");
-        
-        /* Updates to routing table */
-        ret = read(data_socket, &sync_msg, sizeof(sync_msg_t));
-        printf("%i \n", ret);
-        if (ret == -1) {
-            perror("read");
-            break;
-        }
-        
-        /* Put together the key of the encoded routing table entry */
-        memset(dest_mask, 0, sizeof(dest_mask));
-        size_t dest_len = strlen(sync_msg.msg_body.dest);
-        strncat(dest_mask, sync_msg.msg_body.dest, dest_len);
-        strncat(dest_mask + dest_len, sync_msg.msg_body.mask, strlen(sync_msg.msg_body.mask));
-        
-        switch (sync_msg.op_code) {
-            case CREATE:
-                insert(routing_table, dest_mask, sync_msg.msg_body.gw, sync_msg.msg_body.oif);
-                break;
-            case UPDATE:
-                update(routing_table, dest_mask, sync_msg.msg_body.gw, sync_msg.msg_body.oif);
-                break;
-            case DELETE:
-                del(routing_table, dest_mask);
-                break;
-            default:
-                printf("%s\n", sync_msg.msg_body.dest);
-                printf("%s\n", sync_msg.msg_body.mask);
-                perror("Unknown OPCODE");
-                break;
-        }
-        
-        /* Have we received all current updates from the server? (i.e. entire table state when just connected to server) */
-        ret = read(data_socket, &flag, sizeof(int));
-        if (ret == -1) {
-            perror("read");
-            break;
-        }
-        else if (flag == 1) { // don't dislpay table in inconsistent state
-            printf("Display the updated routing table?\n");
-            conn = getchar();
-            scanf("%c", &flush);  // flush newline
-            if (conn == 'y') {
-                display(routing_table);
-            }
-        }
-        else {
-            printf("Received %i bytes for flag\n", ret);
-            printf("Flag is %i \n", flag);
-        }
-        
-        printf("Proceed to receiving updates from server?\n");
-        conn = getchar();
-        scanf("%c", &flush);  // flush newline
-        if (conn != 'y') {
-            printf("Bye\n");
-            flag = 0;
-            write(data_socket, &flag, sizeof(int));
-            break;
-        }
-    } while (1);
+    signal(SIGINT, signal_handler);  //register signal handler
     
-    close(data_socket);
+    /* Continously wait for updates from the routing manager server regarding table contents, stability of
+     updates to the table, and server status. */
+    while (1) {
+        sync_msg_t sync_msg;
+        
+        printf("Waiting for sync mesg\n");
+        ret = read(data_socket, &sync_msg, sizeof(sync_msg_t));
+        if (ret == -1) {
+            perror("read");
+            break;
+        }
+        
+        printf("Is the table stable?\n");
+        ret = read(data_socket, &ready_to_update, sizeof(int));
+        if (ret == -1) {
+            perror("read");
+            break;
+        }
+        
+        printf("Server you still there?\n");
+        ret = read(data_socket, &loop, sizeof(int));
+        if (ret == -1) {
+            perror("read");
+            break;
+        }
+        
+        process_sync_mesg(routing_table, &sync_msg);
+        if (ready_to_update) {
+            display(routing_table);
+        }
+    }
+    
     exit(0);
 }

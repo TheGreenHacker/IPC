@@ -1,20 +1,18 @@
 CC = gcc
 CFLAGS = -Wall -Wextra
 
-.PHONY: RoutingTable
+default: rtm
+	$(CC) $(CFLAGS) client.c rtm.c -o client
+	$(CC) $(CFLAGS) server.c rtm.c -o server
 
-default: RoutingTable
-	$(CC) $(CFLAGS) client.c RoutingTable/RoutingTable.c -o client
-	$(CC) $(CFLAGS) server.c RoutingTable/RoutingTable.c -o server
+client: rtm
+	$(CC) $(CFLAGS) client.c rtm.c -o client
 
-client: RoutingTable
-	$(CC) $(CFLAGS) client.c RoutingTable/RoutingTable.c -o client
+server: rtm
+	$(CC) $(CFLAGS) server.c rtm.c -o server
 
-server: RoutingTable
-	$(CC) $(CFLAGS) server.c RoutingTable/RoutingTable.c -o server
-
-RoutingTable:
-	$(CC) $(CFLAGS) -c RoutingTable/RoutingTable.c -o RoutingTable/RoutingTable.o
+rtm:
+	$(CC) $(CFLAGS) -c rtm.c -o rtm.o
 
 clean:
 	rm -f client server RoutingTable/RoutingTable.o

@@ -15,4 +15,4 @@ rtm:
 	$(CC) $(CFLAGS) -c rtm.c -o rtm.o
 
 clean:
-	rm -f client server RoutingTable/RoutingTable.o
+	rm -f client server rtm.o

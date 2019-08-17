@@ -12,6 +12,7 @@
 int data_socket;
 int loop = 1;
 int disconnect = 1;
+routing_table_t *routing_table;
 
 /* Break out of main infinite loop and inform server of intent to disconnect. */
 void signal_handler(int signal_num)
@@ -21,13 +22,14 @@ void signal_handler(int signal_num)
         loop = 0;
         write(data_socket, &disconnect, sizeof(int));
         close(data_socket);
+        deinit_routing_table(routing_table);
+        free(routing_table);
         exit(0);
     }
 }
 
 int main() {
     struct sockaddr_un addr;
-    routing_table_t *routing_table;
     int ret;
     int ready_to_update;  // indicates if current state of table is stable
     

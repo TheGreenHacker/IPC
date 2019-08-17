@@ -333,7 +333,6 @@ int main() {
             printf("Client activity detected\n");
             int i;
             for(i = 2; i < MAX_CLIENTS; i++){
-                printf("is fd set?\n");
                 if(FD_ISSET(monitored_fd_set[i], &readfds)){
                     int done;
                     int comm_socket_fd = monitored_fd_set[i];

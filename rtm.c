@@ -59,6 +59,8 @@ static void del(routing_table_t *table, routing_table_entry_t *entry) {
 }
 
 
+/* Initialize a routing table, which is a doubly linked list of routing table entries, with a
+ dummy head. */
 void init_routing_table(routing_table_t *table) {
     if (table) {
         table->head = calloc(1, sizeof(routing_table_entry_t));
@@ -70,6 +72,8 @@ void init_routing_table(routing_table_t *table) {
 
 /* Display each row (entry) of a routing table. */
 void display(const routing_table_t *table) {
+    printf("Printing routing table\n");
+    
     routing_table_entry_t *entry = table->head;
     while (entry->contents->mask != DUMMY_MASK) {
         printf("Destination IP: %s  Mask: %u Gateway IP: %s  OIF: %s\n", entry->contents->dest, entry->contents->mask, entry->contents->gw, entry->contents->oif);
@@ -85,16 +89,28 @@ void process_sync_mesg(routing_table_t *table, const sync_msg_t *sync_msg) {
         case CREATE:
             if (entry->contents->mask == DUMMY_MASK) {
                 insert(table, sync_msg->contents.dest, sync_msg->contents.mask, sync_msg->contents.gw, sync_msg->contents.oif);
+                entry = find(table, sync_msg->contents.dest, sync_msg->contents.mask);
+                if (entry->contents->mask != DUMMY_MASK) {
+                    printf("Added: Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry->contents->dest, entry->contents->mask, entry->contents->gw, entry->contents->oif);
+                }
             }
             break;
         case UPDATE:
             if (entry->contents->mask != DUMMY_MASK) {
                 update(entry, sync_msg->contents.gw, sync_msg->contents.oif);
+                entry = find(table, sync_msg->contents.dest, sync_msg->contents.mask);
+                if (!strcmp(entry->contents->gw, sync_msg->contents.gw) && entry->contents->mask == sync_msg->contents.mask) {
+                    printf("Updated: Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry->contents->dest, entry->contents->mask, entry->contents->gw, entry->contents->oif);
+                }
             }
             break;
         case DELETE:
             if (entry->contents->mask != DUMMY_MASK) {
                 del(table, entry);
+                entry = find(table, sync_msg->contents.dest, sync_msg->contents.mask);
+                if (entry->contents->mask == DUMMY_MASK) {
+                    printf("Deleted: Destination IP: %s mask: %u\n", sync_msg->contents.dest, sync_msg->contents.mask);
+                }
             }
             break;
         default:

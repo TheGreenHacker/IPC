@@ -119,6 +119,10 @@ static int create_sync_message(char *operation, sync_msg_t *sync_msg) {
             case 'D':
                 sync_msg->op_code = DELETE;
                 break;
+            case 'S':
+                sync_msg->op_code = DUMMY; // to prevent process_sync_msg from printing that we inserted a dummy node
+                display(routing_table);
+                return 0;
             default:
                 fprintf(stderr, "Invalid operation: unknown op code\n");
                 return -1;
@@ -260,9 +264,15 @@ int main() {
 
         refresh_fd_set(&readfds); /*Copy the entire monitored FDs to readfds*/
         
-        display(routing_table);
+        printf("Please select from the following options:\n");
+        printf("1.CREATE <Destination IP> <Mask (0-32)> <Gateway IP> <OIF>\n");
+        printf("2.UPDATE <Destination IP> <Mask (0-32)> <New Gateway IP> <New OIF>\n");
+        printf("3.DELETE <Destination IP> <Mask (0-32)>\n");
+        printf("4.SHOW\n");
         
-        printf("Select...\n");
+        // display(routing_table);
+        
+        // printf("Select...\n");
         
         select(get_max_fd() + 1, &readfds, NULL, NULL, NULL);  /* Wait for incoming connections. */
 
@@ -296,6 +306,8 @@ int main() {
             write(data_socket, &sync_msg, sizeof(sync_msg_t));
             write(data_socket, &ready_to_update, sizeof(int));
             write(data_socket, &loop, sizeof(int));
+            
+            printf("All current entries synchronized to new client.\n");
         }
         else if(FD_ISSET(0, &readfds)){ // update from routing table manager via stdin
             printf("Manager has some changes to make\n");
@@ -309,24 +321,21 @@ int main() {
             
             //printf("Operation : %s\n", operation);
             
-            //print_monitored_fd_set();
-            
             if (!create_sync_message(operation, &sync_msg)) {
-                //print_monitored_fd_set();
                 process_sync_mesg(routing_table, &sync_msg); // update server's table
-                //print_monitored_fd_set();
+
                 /* Notify existing clients of changes */
                 int i, comm_socket_fd;
                 ready_to_update = 1;
                 for (i = 2; i < MAX_CLIENTS; i++) {
                     comm_socket_fd = monitored_fd_set[i];
-                    //printf("%i\n", comm_socket_fd);
                     if (comm_socket_fd != -1) {
                         write(comm_socket_fd, &sync_msg, sizeof(sync_msg));
                         write(comm_socket_fd, &ready_to_update, sizeof(int));
                         write(comm_socket_fd, &loop, sizeof(int));
                     }
                 }
+                printf("Entry synchronized to all connected clients.\n");
             }
         }
         else { /* Check active status of clients */

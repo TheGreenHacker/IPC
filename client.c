@@ -83,7 +83,16 @@ int main() {
         
         process_sync_mesg(routing_table, &sync_msg);
         if (ready_to_update) {
-            display(routing_table);
+            //display(routing_table);
+            
+            char c, flush;
+            printf("Routing table is up to date. Would you like to see it?(y/n)\n");
+            c = getchar();
+            scanf("%c", &flush); // to flush the newline
+            
+            if (c == 'y') {
+                display(routing_table);
+            }
         }
     }
     

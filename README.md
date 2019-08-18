@@ -24,5 +24,8 @@ reflect all such changes
 * When the server shuts down via CTRL-C, all clients shut down cleanly
 * All entries are uniquely identified by the dest and mask fields
 
+## Resources
+* Udemy's "Linux Inter Process Communication (IPC) from Scratch" course by Abhishek Sagar
+
 ## Other Notes
 When client shuts down on Mac OS or Windows, server SEG FAULTS. So please, only run on Linux systems. 

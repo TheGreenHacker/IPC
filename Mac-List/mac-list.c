@@ -9,7 +9,7 @@
 void display_mac_list(const dll_t *mac_list) {
     printf("Printing MAC list\n");
     
-    dll_node_t *node = mac_list->head;
+    dll_node_t *node = mac_list->head->next;
     while (node != mac_list->head) {
         mac_list_entry_t entry = *((mac_list_entry_t *) node->data);
         printf("MAC address: %s \n", entry.mac);
@@ -19,7 +19,7 @@ void display_mac_list(const dll_t *mac_list) {
 
 /* Look up entry in MAC list by MAC address. */
 dll_node_t *find_mac(const dll_t *mac_list, const char *mac) {
-    dll_node_t *node = mac_list->head;
+    dll_node_t *node = mac_list->head->next;
     while (node != mac_list->head) {
         mac_list_entry_t entry = *((mac_list_entry_t *) node->data);
         if (!strcmp(entry.mac, mac)) {

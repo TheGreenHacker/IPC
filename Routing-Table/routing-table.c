@@ -9,7 +9,7 @@
 void display_routing_table(const dll_t *routing_table) {
     printf("Printing routing table\n");
     
-    dll_node_t *node = routing_table->head;
+    dll_node_t *node = routing_table->head->next;
     while (node != routing_table->head) {
         routing_table_entry_t entry = *((routing_table_entry_t *) node->data);
         printf("Destination IP: %s  Mask: %u Gateway IP: %s  OIF: %s\n", entry.dest, entry.mask, entry.gw, entry.oif);
@@ -19,7 +19,7 @@ void display_routing_table(const dll_t *routing_table) {
 
 /* Look up entry in routing table by destination IP and subnet mask. */
 dll_node_t *find_routing_table_entry(const dll_t *routing_table, const char *dest, const unsigned short mask) {
-    dll_node_t *node = routing_table->head;
+    dll_node_t *node = routing_table->head->next;
     while (node != routing_table->head) {
         routing_table_entry_t entry = *((routing_table_entry_t *) node->data);
         if (!strcmp(entry.dest, dest) && entry.mask == mask) {

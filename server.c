@@ -233,9 +233,17 @@ void signal_handler(int signal_num)
 /* Send newly client all necessary CREATE commands to replicate the server's copies of the current routing table or MAC list. */
 void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync_msg) {
     dll_node_t *head = L3 ? routing_table->head : mac_list->head;
+    if (head->data) {
+        printf("fuck me\n");
+    }
     dll_node_t *curr = head->next;
-    
+    if (curr == head) {
+        printf("WTFFFF\n");
+    }
+    //display_routing_table(routing_table);
+    //printf("why the fuck is second client not getting any updates?\n");    
     while (curr != head) {
+        printf("Second client, do you read me\n");
         routing_table_entry_t rt_entry = *((routing_table_entry_t *) curr->data);
         mac_list_entry_t ml_entry = *((mac_list_entry_t *) curr->data);
         
@@ -320,7 +328,7 @@ int main() {
     while (1) {
         char op[OP_LEN];
         sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
-        synchronized = NONE;
+        synchronized = 0;
 
         refresh_fd_set(&readfds); /*Copy the entire monitored FDs to readfds*/
         
@@ -336,6 +344,7 @@ int main() {
         if(FD_ISSET(connection_socket, &readfds)){
             //printf("Got a client\n");
             data_socket = accept(connection_socket, NULL, NULL);
+            printf("%i\n", data_socket);
             if (data_socket == -1) {
                 perror("accept");
                 exit(1);

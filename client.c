@@ -36,16 +36,22 @@ void signal_handler(int signal_num)
 /* Optionally, display contents of a data structure (routing table or MAC list). */
 void display_ds() {
     char c, flush;
-    printf("Routing table or MAC list is up to date. Would you like to see it?(y/n)\n");
-    c = getchar();
-    scanf("%c", &flush); // to flush the newline
-    
     switch (synchronized) {
         case RT:
-            display_routing_table(routing_table);
+            printf("Routing table is up to date. Would you like to see it?(y/n)\n");
+            c = getchar();
+            scanf("%c", &flush);
+            if (c == 'y') {
+                display_routing_table(routing_table);
+            }
             break;
         case ML:
-            display_mac_list(mac_list);
+            printf("MAC list is up to data. Would you like to see it?(y/n)\n");
+            c = getchar();
+            scanf("%c", &flush);
+            if (c == 'y') {
+                display_mac_list(mac_list);
+            }
             break;
         default:
             break;
@@ -58,6 +64,7 @@ int main() {
     
     routing_table = init_dll();
     mac_list = init_dll();
+    synchronized = 0;
     
     data_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (data_socket == -1) {
@@ -84,7 +91,7 @@ int main() {
         sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
         
         //printf("Waiting for sync mesg\n");
-        ret = read(data_socket, &sync_msg, sizeof(sync_msg_t));
+        ret = read(data_socket, sync_msg, sizeof(sync_msg_t));
         if (ret == -1) {
             perror("read");
             break;
@@ -110,7 +117,7 @@ int main() {
         else {
             process_sync_mesg(mac_list, sync_msg);
         }
-        
+        //printf("%i\n", synchronized);
         if (synchronized) {
             display_ds();
         }

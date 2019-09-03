@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include "dll.h"
 
@@ -15,6 +16,7 @@ dll_t *init_dll() {
 
 /* Add new node with data to back of list. */
 void append(dll_t *dll, void *data) {
+    dll_node_t *head = dll->head; 
     dll_node_t *node = calloc(1, sizeof(dll_node_t));
     node->data = data;
     node->next = dll->head;
@@ -22,7 +24,9 @@ void append(dll_t *dll, void *data) {
     dll->head->prev = node;
     dll->tail->next = node;
     dll->tail = node;
-    
+    if (dll->head != head) {
+        printf("Fuck something's wrong...\n");
+    }
 }
 
 /* Delete a node from the list. */

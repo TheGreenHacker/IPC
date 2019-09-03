@@ -7,12 +7,17 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include "rtm.h"
+#include "DLL/dll.h"
+#include "Mac-List/mac-list.h"
+#include "Routing-Table/routing-table.h"
+#include "Sync/sync.h"
 
+int synchronized;
 int data_socket;
 int loop = 1;
 int disconnect = 1;
-routing_table_t *routing_table;
+dll_t *routing_table;
+dll_t *mac_list;
 
 /* Break out of main infinite loop and inform server of intent to disconnect. */
 void signal_handler(int signal_num)
@@ -22,16 +27,37 @@ void signal_handler(int signal_num)
         loop = 0;
         write(data_socket, &disconnect, sizeof(int));
         close(data_socket);
-        deinit_routing_table(routing_table);
-        free(routing_table);
+        deinit_dll(routing_table);
+        deinit_dll(mac_list);
         exit(0);
+    }
+}
+
+/* Optionally, display contents of a data structure (routing table or MAC list). */
+void display_ds() {
+    char c, flush;
+    printf("Routing table or MAC list is up to date. Would you like to see it?(y/n)\n");
+    c = getchar();
+    scanf("%c", &flush); // to flush the newline
+    
+    switch (synchronized) {
+        case RT:
+            display_routing_table(routing_table);
+            break;
+        case ML:
+            display_mac_list(mac_list);
+            break;
+        default:
+            break;
     }
 }
 
 int main() {
     struct sockaddr_un addr;
     int ret;
-    int ready_to_update;  // indicates if current state of table is stable
+    
+    routing_table = init_dll();
+    mac_list = init_dll();
     
     data_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (data_socket == -1) {
@@ -50,49 +76,43 @@ int main() {
         exit(1);
     }
     
-    routing_table = calloc(1, sizeof(routing_table_t));
-    init_routing_table(routing_table);
-    
     signal(SIGINT, signal_handler);  //register signal handler
     
     /* Continously wait for updates from the routing manager server regarding table contents, stability of
      updates to the table, and server status. */
     while (loop) {
-        sync_msg_t sync_msg;
+        sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
         
-        printf("Waiting for sync mesg\n");
+        //printf("Waiting for sync mesg\n");
         ret = read(data_socket, &sync_msg, sizeof(sync_msg_t));
         if (ret == -1) {
             perror("read");
             break;
         }
         
-        printf("Is the table stable?\n");
-        ret = read(data_socket, &ready_to_update, sizeof(int));
+        //printf("Is the table stable?\n");
+        ret = read(data_socket, &synchronized, sizeof(int));
         if (ret == -1) {
             perror("read");
             break;
         }
         
-        printf("Server you still there?\n");
+        //printf("Server you still there?\n");
         ret = read(data_socket, &loop, sizeof(int));
         if (ret == -1) {
             perror("read");
             break;
         }
         
-        process_sync_mesg(routing_table, &sync_msg);
-        if (ready_to_update) {
-            //display(routing_table);
-            
-            char c, flush;
-            printf("Routing table is up to date. Would you like to see it?(y/n)\n");
-            c = getchar();
-            scanf("%c", &flush); // to flush the newline
-            
-            if (c == 'y') {
-                display(routing_table);
-            }
+        if (sync_msg->l_code == L3) {
+            process_sync_mesg(routing_table, sync_msg);
+        }
+        else {
+            process_sync_mesg(mac_list, sync_msg);
+        }
+        
+        if (synchronized) {
+            display_ds();
         }
     }
     

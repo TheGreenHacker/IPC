@@ -56,7 +56,6 @@ void display_ds(int synchronized) {
             }
             break;
         default:
-            printf("wtf ML got skipped over\n");
             break;
     }
 }
@@ -120,11 +119,6 @@ int main() {
             process_sync_mesg(routing_table, sync_msg);
         }
         else {
-            /*
-            if (get_IP(sync_msg->msg_body.mac_list_entry.mac, ip)) {
-                printf("IP address for MAC address %s is: %s\n", sync_msg->msg_body.mac_list_entry.mac, ip);
-            }
-             */
             process_sync_mesg(mac_list, sync_msg);
         }
         

@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
+
+#include "Routing-Table/routing-table.h"
 
 /* Stores IP address in newly created shared memory region corresponding to its key, which is a MAC address. Returns the size of the created shm on success otherwise -1 on failure. */
 int store_IP(const char *mac, const char *ip) {

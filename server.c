@@ -249,21 +249,12 @@ void signal_handler(int signal_num)
 /* Send newly client all necessary CREATE commands to replicate the server's copies of the current routing table or MAC list. */
 void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync_msg) {
     dll_node_t *head = l_code == L3 ? routing_table->head : mac_list->head;
-    if (head->data) {
-        printf("fuck me\n");
-    }
     dll_node_t *curr = head->next;
-    if (curr == head) {
-        printf("WTFFFF\n");
-    }
-    //display_routing_table(routing_table);
-    //printf("why the fuck is second client not getting any updates?\n");    
+
     while (curr != head) {
-        //printf("Second client, do you read me\n");
         routing_table_entry_t rt_entry = *((routing_table_entry_t *) curr->data);
         mac_list_entry_t ml_entry = *((mac_list_entry_t *) curr->data);
         
-        //printf("the type casting worked\n");        
         sync_msg->op_code = CREATE;
         if (l_code == L3) {
             sprintf(op, "C %s %u %s %s", rt_entry.dest, rt_entry.mask, rt_entry.gw, rt_entry.oif);
@@ -271,7 +262,7 @@ void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync
         else {
             sprintf(op, "C %s", ml_entry.mac);
         }
-        //printf("sprintf worked\n");
+
         create_sync_message(op, sync_msg, 1);
         
         write(data_socket, sync_msg, sizeof(sync_msg_t));
@@ -361,9 +352,7 @@ int main() {
 
         /* New connection: send entire routing table and mac list states to newly connected client. */
         if(FD_ISSET(connection_socket, &readfds)){
-            //printf("Got a client\n");
             data_socket = accept(connection_socket, NULL, NULL);
-            //printf("%i\n", data_socket);
             if (data_socket == -1) {
                 perror("accept");
                 exit(1);
@@ -372,12 +361,9 @@ int main() {
             add_to_monitored_fd_set(data_socket);
             
             update_new_client(data_socket, L3, op, sync_msg);
-            //printf("made it past L3\n");
             update_new_client(data_socket, L2, op, sync_msg);
-            //printf("made it past L2\n");
         }
         else if(FD_ISSET(0, &readfds)){ // update from network admin via stdin
-            //printf("Admin has some changes to make\n");
             ret = read(0, op, OP_LEN - 1);
             op[strcspn(op, "\r\n")] = 0; // flush new line
             if (ret == -1) {
@@ -386,7 +372,6 @@ int main() {
             }
             op[ret] = 0;
             
-            //printf("Operation : %s\n", operation);
             
             if (!create_sync_message(op, sync_msg, 0)) {
                 // update server's tables
@@ -409,11 +394,9 @@ int main() {
                         write(comm_socket_fd, &loop, sizeof(int));
                     }
                 }
-                //printf("Entry synchronized to all connected clients.\n");
             }
         }
         else { /* Check active status of clients */
-            //printf("Client activity detected\n");
             int i;
             for(i = 2; i < MAX_CLIENTS; i++){
                 if(FD_ISSET(monitored_fd_set[i], &readfds)){

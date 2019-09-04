@@ -336,7 +336,9 @@ int main() {
         printf("1.CREATE <Destination IP> <Mask (0-32)> <Gateway IP> <OIF>\n");
         printf("2.UPDATE <Destination IP> <Mask (0-32)> <New Gateway IP> <New OIF>\n");
         printf("3.DELETE <Destination IP> <Mask (0-32)>\n");
-        printf("4.SHOW\n");
+        printf("4.CREATE <MAC>\n");
+        printf("5.DELETE <MAC>\n");
+        printf("6.SHOW\n");
         
         select(get_max_fd() + 1, &readfds, NULL, NULL, NULL);  /* Wait for incoming connections. */
 

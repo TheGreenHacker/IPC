@@ -21,31 +21,6 @@ int disconnect = 1;
 dll_t *routing_table;
 dll_t *mac_list;
 
-/* Get the IP address corresponding to the MAC address from the shared region that the server created.
- Returns number of bytes on succcess else -1 on failure. */
-int get_IP(const char *mac, char *ip) {
-    int shm_fd = shm_open(mac, O_CREAT | O_RDONLY , 0660);
-    if (shm_fd == -1) {
-        printf("Could not open shared memory for MAC %s - IP %s pair\n", mac, ip);
-        return -1;
-    }
-    
-    void *shm_reg = mmap(NULL, IP_ADDR_LEN, PROT_READ, MAP_SHARED, shm_fd, 0);
-    if(shm_reg == MAP_FAILED){
-        printf("Mapping failed\n");
-        return -1;
-    }
-    
-    memcpy(ip, shm_reg, IP_ADDR_LEN);
-    if (munmap(shm_reg, IP_ADDR_LEN) == -1) {
-        printf("Unmapping failed\n");
-        return -1;
-    }
-    
-    close(shm_fd);
-    return strlen(ip);
-}
-
 /* Break out of main infinite loop and inform server of intent to disconnect. */
 void signal_handler(int signal_num)
 {
@@ -145,9 +120,11 @@ int main() {
             process_sync_mesg(routing_table, sync_msg);
         }
         else {
+            /*
             if (get_IP(sync_msg->msg_body.mac_list_entry.mac, ip)) {
                 printf("IP address for MAC address %s is: %s\n", sync_msg->msg_body.mac_list_entry.mac, ip);
             }
+             */
             process_sync_mesg(mac_list, sync_msg);
         }
         

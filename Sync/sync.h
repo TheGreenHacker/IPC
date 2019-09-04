@@ -4,7 +4,7 @@
 #include "../Routing-Table/routing-table.h"
 #include "../Mac-List/mac-list.h"
 
-/* Synchronization protocol constants and structure definitions */
+/* Synchronization protocol constants, structure, and API definitions */
 #define SOCKET_NAME "NetworkAdminSocket"
 
 #define WAIT 0
@@ -40,5 +40,6 @@ typedef struct _sync_msg {
 } sync_msg_t;
 
 void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg);
+extern int get_IP(const char *mac, char *ip);
 
 #endif

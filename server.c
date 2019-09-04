@@ -21,6 +21,8 @@
 #define OP_LEN 128
 #define MAX_MASK 32
 
+extern int store_IP(const char *mac, const char *ip);
+
 /* Indicates to client if any data structure has been synchronized.
  WAIT: none
  RT: routing table
@@ -128,39 +130,6 @@ int get_max_fd(){
     return max;
 }
 
-/* Stores IP address in newly created shared memory region corresponding to its key, which is a MAC address. Returns the size of the created shm on success otherwise -1 on failure. */
-int store_IP(const char *mac, const char *ip) {
-    size_t size = strlen(ip); // account for terminating null byte
-    int shm_fd = shm_open(mac, O_CREAT | O_RDWR | O_TRUNC, 0660);
-    if (shm_fd == -1) {
-        printf("Could not create shared memory for MAC %s - IP %s pair\n", mac, ip);
-        return -1;
-    }
-    
-    if (ftruncate(shm_fd, size) == -1) {
-        printf("Error on ftruncate to allocate size for IP %s\n", ip);
-        return -1;
-    }
-    
-    void *shm_reg =  mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if(shm_reg == MAP_FAILED){
-        printf("Mapping failed\n");
-        return -1;
-    }
-    
-    memset(shm_reg, 0, size);
-    memcpy(shm_reg, ip, size);
-    
-    if (munmap(shm_reg, size) == -1) {
-        printf("Unmapping failed\n");
-        return -1;
-    }
-    
-    close(shm_fd);
-    return size;
-}
-
-
 /* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> with each field separated by a space, from the routing table manager to create a sync message for clients, instructing them on how to update their copies of the routing table. */
 int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
     char *token = strtok(operation, " ");
@@ -206,6 +175,7 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
             ip[strcspn(ip, "\r\n")] = 0;
            
             if (ret < 0 || store_IP(sync_msg->msg_body.mac_list_entry.mac, ip) == -1) {
+                fprintf(stderr, "Failed to store ip address\n");
                 return -1;
             }
         }

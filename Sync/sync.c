@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h> // for unlink
+#include <errno.h>
 
 #include "../DLL/dll.h"
 #include "sync.h"
@@ -7,6 +9,7 @@
 #include "../Mac-List/mac-list.h"
 #include "../Routing-Table/routing-table.h"
  */
+
 
 void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
     dll_node_t *node;
@@ -19,7 +22,7 @@ void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
                     node = find_routing_table_entry(dll, sync_msg->msg_body.routing_table_entry.dest, sync_msg->msg_body.routing_table_entry.mask);
                     if (node != dll->head) {
                         routing_table_entry_t entry = *((routing_table_entry_t *) node->data);
-                        printf("Added: Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry.dest, entry.mask, entry.gw, entry.oif);
+                        printf("Added Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry.dest, entry.mask, entry.gw, entry.oif);
                     }
                 }
                 break;
@@ -29,7 +32,7 @@ void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
                     node = find_routing_table_entry(dll, sync_msg->msg_body.routing_table_entry.dest, sync_msg->msg_body.routing_table_entry.mask);
                     if (node != dll->head) {
                         routing_table_entry_t entry = *((routing_table_entry_t *) node->data);
-                        printf("Updated: Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry.dest, entry.mask, entry.gw, entry.oif);
+                        printf("Updated Destination IP: %s mask: %u Gateway IP: %s OIF: %s\n", entry.dest, entry.mask, entry.gw, entry.oif);
                     }
                 }
                 break;
@@ -38,7 +41,7 @@ void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
                     del(dll, node);
                     node = find_routing_table_entry(dll, sync_msg->msg_body.routing_table_entry.dest, sync_msg->msg_body.routing_table_entry.mask);
                     if (node == dll->head) {
-                        printf("Deleted: Destination IP: %s mask: %u\n", sync_msg->msg_body.routing_table_entry.dest, sync_msg->msg_body.routing_table_entry.mask);
+                        printf("Deleted Destination IP: %s mask: %u\n", sync_msg->msg_body.routing_table_entry.dest, sync_msg->msg_body.routing_table_entry.mask);
                     }
                 }
                 break;
@@ -55,7 +58,12 @@ void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
                     node = find_mac(dll, sync_msg->msg_body.mac_list_entry.mac);
                     if (node != dll->head) {
                         mac_list_entry_t entry = *((mac_list_entry_t *) node->data);
-                        printf("Added: MAC: %s\n", entry.mac);
+                        printf("Added MAC: %s", entry.mac);
+                        char ip[IP_ADDR_LEN];
+                        if (get_IP(entry.mac, ip) != -1) {
+                            printf("IP: %s", ip);
+                        }
+                        printf("\n");
                     }
                 }
                 break;
@@ -64,7 +72,8 @@ void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
                     del(dll, node);
                     node = find_mac(dll, sync_msg->msg_body.mac_list_entry.mac);
                     if (node == dll->head) {
-                         printf("Deleted: MAC: %s\n", sync_msg->msg_body.mac_list_entry.mac);
+                        printf("Deleted: MAC: %s\n", sync_msg->msg_body.mac_list_entry.mac);
+                        unlink(sync_msg->msg_body.mac_list_entry.mac); // deallocate shared memory region corresponding to this MAC key
                     }
                 }
                 break;

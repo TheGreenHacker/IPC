@@ -4,6 +4,9 @@
 
 #include "mac-list.h"
 #include "../DLL/dll.h"
+#include "../Routing-Table/routing-table.h"
+
+extern int get_IP(const char *mac, char *ip);
 
 /* Display each row (entry) of a routing table. */
 void display_mac_list(const dll_t *mac_list) {
@@ -12,7 +15,13 @@ void display_mac_list(const dll_t *mac_list) {
     dll_node_t *node = mac_list->head->next;
     while (node != mac_list->head) {
         mac_list_entry_t entry = *((mac_list_entry_t *) node->data);
-        printf("MAC address: %s \n", entry.mac);
+        printf("MAC: %s ", entry.mac);
+        
+        char ip[IP_ADDR_LEN];
+        if (get_IP(entry.mac, ip) != -1) {
+            printf("IP: %s", ip);
+        }
+        printf("\n");
         node = node->next;
     }
 }

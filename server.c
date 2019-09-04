@@ -232,7 +232,7 @@ void signal_handler(int signal_num)
 
 /* Send newly client all necessary CREATE commands to replicate the server's copies of the current routing table or MAC list. */
 void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync_msg) {
-    dll_node_t *head = L3 ? routing_table->head : mac_list->head;
+    dll_node_t *head = LCODE l_code == L3 ? routing_table->head : mac_list->head;
     if (head->data) {
         printf("fuck me\n");
     }

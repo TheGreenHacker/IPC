@@ -162,7 +162,7 @@ int store_IP(const char *mac, const char *ip) {
 
 
 /* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> with each field separated by a space, from the routing table manager to create a sync message for clients, instructing them on how to update their copies of the routing table. */
-int create_sync_message(char *operation, sync_msg_t *sync_msg) {
+int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
     char *token = strtok(operation, " ");
     if (token) {
         switch (token[0]) {
@@ -198,6 +198,18 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg) {
     else if (isValidMAC(token)) {
         sync_msg->l_code = L2;
         memcpy(sync_msg->msg_body.mac_list_entry.mac, token, strlen(token));
+        
+        if (!silent && sync_msg->op_code == CREATE) {
+            printf("Enter an IP address:\n");
+            char ip[IP_ADDR_LEN];  
+            int ret = read(0, ip, IP_ADDR_LEN);
+            ip[strcspn(ip, "\r\n")] = 0;
+           
+            if (ret < 0 || store_IP(sync_msg->msg_body.mac_list_entry.mac, ip) == -1) {
+                return -1;
+            }
+        }
+        return 0;
     }
     else {
         fprintf(stderr, "Invalid operation: invalid or missing destination IP/MAC address\n");
@@ -207,10 +219,6 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg) {
     token = strtok(NULL, " ");
     if (isValidMask(token)) {
         sync_msg->msg_body.routing_table_entry.mask = atoi(token);
-    }
-    else if (isValidIP(token) && store_IP(sync_msg->msg_body.mac_list_entry.mac, token) != -1) {
-        printf("Successfully stored IP %s in shared memory region\n", token);
-        return 0;
     }
     else {
         fprintf(stderr, "Invalid operation: invalid or missing subnet mask/IP address\n");
@@ -281,10 +289,11 @@ void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync
     //display_routing_table(routing_table);
     //printf("why the fuck is second client not getting any updates?\n");    
     while (curr != head) {
-        printf("Second client, do you read me\n");
+        //printf("Second client, do you read me\n");
         routing_table_entry_t rt_entry = *((routing_table_entry_t *) curr->data);
         mac_list_entry_t ml_entry = *((mac_list_entry_t *) curr->data);
         
+        //printf("the type casting worked\n");        
         sync_msg->op_code = CREATE;
         if (l_code == L3) {
             sprintf(op, "C %s %u %s %s", rt_entry.dest, rt_entry.mask, rt_entry.gw, rt_entry.oif);
@@ -292,8 +301,8 @@ void update_new_client(int data_socket, LCODE l_code, char *op, sync_msg_t *sync
         else {
             sprintf(op, "C %s", ml_entry.mac);
         }
-        
-        create_sync_message(op, sync_msg);
+        //printf("sprintf worked\n");
+        create_sync_message(op, sync_msg, 1);
         
         write(data_socket, sync_msg, sizeof(sync_msg_t));
         write(data_socket, &synchronized, sizeof(int));
@@ -374,7 +383,7 @@ int main() {
         printf("1.CREATE <Destination IP> <Mask (0-32)> <Gateway IP> <OIF>\n");
         printf("2.UPDATE <Destination IP> <Mask (0-32)> <New Gateway IP> <New OIF>\n");
         printf("3.DELETE <Destination IP> <Mask (0-32)>\n");
-        printf("4.CREATE <MAC> <IP>\n");
+        printf("4.CREATE <MAC>\n");
         printf("5.DELETE <MAC>\n");
         printf("6.SHOW\n");
         
@@ -384,7 +393,7 @@ int main() {
         if(FD_ISSET(connection_socket, &readfds)){
             //printf("Got a client\n");
             data_socket = accept(connection_socket, NULL, NULL);
-            printf("%i\n", data_socket);
+            //printf("%i\n", data_socket);
             if (data_socket == -1) {
                 perror("accept");
                 exit(1);
@@ -393,7 +402,9 @@ int main() {
             add_to_monitored_fd_set(data_socket);
             
             update_new_client(data_socket, L3, op, sync_msg);
+            //printf("made it past L3\n");
             update_new_client(data_socket, L2, op, sync_msg);
+            //printf("made it past L2\n");
         }
         else if(FD_ISSET(0, &readfds)){ // update from network admin via stdin
             //printf("Admin has some changes to make\n");
@@ -407,7 +418,7 @@ int main() {
             
             //printf("Operation : %s\n", operation);
             
-            if (!create_sync_message(op, sync_msg)) {
+            if (!create_sync_message(op, sync_msg, 0)) {
                 // update server's tables
                 if (sync_msg->l_code == L3) {
                     process_sync_mesg(routing_table, sync_msg);

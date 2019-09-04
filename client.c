@@ -81,6 +81,7 @@ void display_ds(int synchronized) {
             }
             break;
         default:
+            printf("wtf ML got skipped over\n");
             break;
     }
 }

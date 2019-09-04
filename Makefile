@@ -5,14 +5,14 @@ DEPSRC = DLL/dll.c Mac-List/mac-list.c Routing-Table/routing-table.c Sync/sync.c
 .PHONY: dll mac-list routing-table sync
 
 default: dll mac-list routing-table sync
-	$(CC) $(CFLAGS) client.c $(DEPSRC) -o client
-	$(CC) $(CFLAGS) server.c $(DEPSRC) -o server
+	$(CC) $(CFLAGS) client.c $(DEPSRC) -o client -lrt
+	$(CC) $(CFLAGS) server.c $(DEPSRC) -o server -lrt
 
 client: dll mac-list routing-table sync
-	$(CC) $(CFLAGS) client.c $(DEPSRC) -o client
+	$(CC) $(CFLAGS) client.c $(DEPSRC) -o client -lrt
 
 server: dll mac-list routing-table sync
-	$(CC) $(CFLAGS) server.c $(DEPSRC) -o server
+	$(CC) $(CFLAGS) server.c $(DEPSRC) -o server -lrt
 
 dll:
 	$(CC) $(CFLAGS) -c DLL/dll.c -o DLL/dll.o

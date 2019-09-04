@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/shm.h>
+#include <sys/mman.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -125,6 +128,38 @@ int get_max_fd(){
     return max;
 }
 
+/* Stores IP address in newly created shared memory region corresponding to its key, which is a MAC address. Returns the size of the created shm on success otherwise -1 on failure. */
+int store_IP(const char *mac, const char *ip) {
+    size_t size = strlen(ip); // account for terminating null byte
+    int shm_fd = shm_open(mac, O_CREAT | O_RDWR | O_TRUNC, 0660);
+    if (shm_fd == -1) {
+        printf("Could not create shared memory for MAC %s - IP %s pair\n", mac, ip);
+        return -1;
+    }
+    
+    if (ftruncate(shm_fd, size) == -1) {
+        printf("Error on ftruncate to allocate size for IP %s\n", ip);
+        return -1;
+    }
+    
+    void *shm_reg =  mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if(shm_reg == MAP_FAILED){
+        printf("Mapping failed\n");
+        return -1;
+    }
+    
+    memset(shm_reg, 0, size);
+    memcpy(shm_reg, ip, size);
+    
+    if (munmap(shm_reg, size) == -1) {
+        printf("Unmapping failed\n");
+        return -1;
+    }
+    
+    close(shm_fd);
+    return size;
+}
+
 
 /* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> with each field separated by a space, from the routing table manager to create a sync message for clients, instructing them on how to update their copies of the routing table. */
 int create_sync_message(char *operation, sync_msg_t *sync_msg) {
@@ -163,7 +198,6 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg) {
     else if (isValidMAC(token)) {
         sync_msg->l_code = L2;
         memcpy(sync_msg->msg_body.mac_list_entry.mac, token, strlen(token));
-        return 0;
     }
     else {
         fprintf(stderr, "Invalid operation: invalid or missing destination IP/MAC address\n");
@@ -174,8 +208,12 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg) {
     if (isValidMask(token)) {
         sync_msg->msg_body.routing_table_entry.mask = atoi(token);
     }
+    else if (isValidIP(token) && store_IP(sync_msg->msg_body.mac_list_entry.mac, token) != -1) {
+        printf("Successfully stored IP %s in shared memory region\n", token);
+        return 0;
+    }
     else {
-        fprintf(stderr, "Invalid operation: invalid or missing subnet mask value\n");
+        fprintf(stderr, "Invalid operation: invalid or missing subnet mask/IP address\n");
         return -1;
     }
     
@@ -336,7 +374,7 @@ int main() {
         printf("1.CREATE <Destination IP> <Mask (0-32)> <Gateway IP> <OIF>\n");
         printf("2.UPDATE <Destination IP> <Mask (0-32)> <New Gateway IP> <New OIF>\n");
         printf("3.DELETE <Destination IP> <Mask (0-32)>\n");
-        printf("4.CREATE <MAC>\n");
+        printf("4.CREATE <MAC> <IP>\n");
         printf("5.DELETE <MAC>\n");
         printf("6.SHOW\n");
         

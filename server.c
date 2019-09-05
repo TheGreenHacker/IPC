@@ -23,20 +23,15 @@
 
 extern int store_IP(const char *mac, const char *ip);
 
-/* Indicates to client if any data structure has been synchronized.
- WAIT: none
- RT: routing table
- ML: MAC list
- */
-int synchronized;
-int connection_socket;
-int loop = 1;
+int synchronized; // indicates if server has finished sending current updates
+int connection_socket; // socket to establish connections with new clients
+int loop = 1; // indicates if server is still running to clients
+
+/* Server's copies of network data structures */
 dll_t *routing_table;
 dll_t *mac_list;
 
-/*An array of File descriptors which the server process
- * is maintaining in order to talk with the connected clients.
- * Master skt FD is also a member of this array*/
+/*An array of File descriptors which the server process is maintaining in order to talk with the connected clients. Master skt FD is also a member of this array*/
 int monitored_fd_set[MAX_CLIENTS];
 
 /*Remove all the FDs, if any, from the the array*/
@@ -45,7 +40,6 @@ void intitiaze_monitor_fd_set(){
     for(; i < MAX_CLIENTS; i++)
         monitored_fd_set[i] = -1;
 }
-
 
 /*Add a new FD to the monitored_fd_set array*/
 void add_to_monitored_fd_set(int skt_fd){
@@ -58,7 +52,6 @@ void add_to_monitored_fd_set(int skt_fd){
     }
 }
 
-
 /*Remove the FD from monitored_fd_set array*/
 void remove_from_monitored_fd_set(int skt_fd){
     int i = 0;
@@ -70,9 +63,7 @@ void remove_from_monitored_fd_set(int skt_fd){
     }
 }
 
-
-/* Clone all the FDs in monitored_fd_set array into
- * fd_set Data structure*/
+/* Clone all the FDs in monitored_fd_set array into fd_set Data structure*/
 void refresh_fd_set(fd_set *fd_set_ptr){
     FD_ZERO(fd_set_ptr);
     int i = 0;
@@ -83,7 +74,7 @@ void refresh_fd_set(fd_set *fd_set_ptr){
     }
 }
 
-
+/* Helper function for isValidMask */
 int digits_only(const char *s)
 {
     while (*s) {
@@ -93,18 +84,19 @@ int digits_only(const char *s)
     return 1;
 }
 
-
+/* Checks if IP address is valid */
 int isValidIP(const char *addr) {
     struct sockaddr_in sa;
     return addr && inet_pton(AF_INET, addr, &(sa.sin_addr)) != 0;
 }
 
 
-/* Mask is valid if it begins with a /, the rest of the string following the / contains only digits, and the numerical value of the rest of the string is between 0 and 32, inclusive. */
+/* Mask is valid if it is a string that can be converted to an integer within [0, 32] */
 int isValidMask(const char *mask) {
     return digits_only(mask) && atoi(mask) <= 32;
 }
 
+/* Checks if a given string represents a valid mac address in the format XX:XX:XX:XX:XX:XX, where each X represents a hexidecimal digit 0-9 or a-f */
 int isValidMAC(const char *addr) {
     int i;
     for(i = 0; i < MAC_ADDR_LEN - 1; i++) {
@@ -116,8 +108,7 @@ int isValidMAC(const char *addr) {
     return addr[i] == '\0';
 }
 
-/*Get the numerical max value among all FDs which server
- * is monitoring*/
+/*Get the numerical max value among all FDs which server is monitoring*/
 int get_max_fd(){
     int i = 0;
     int max = -1;
@@ -130,7 +121,7 @@ int get_max_fd(){
     return max;
 }
 
-/* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> with each field separated by a space, from the routing table manager to create a sync message for clients, instructing them on how to update their copies of the routing table. */
+/* Parses a string command, in the format <Opcode, Dest, Mask, GW, OIF> or <Opcode, Mac> with each field separated by a space, to create a sync message for clients, instructing them on how to update their copies of the routing table. The silent parameter indicates whether the server is actively inputting a command for MAC list via stdin or a client is replicating a command sent by the server. Returns 0 on success and -1 on any failure. */
 int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
     char *token = strtok(operation, " ");
     if (token) {
@@ -293,11 +284,7 @@ int main() {
     intitiaze_monitor_fd_set();
     add_to_monitored_fd_set(0);
     
-    /*In case the program exited inadvertently on the last run,
-     *remove the socket.
-     **/
-    
-    unlink(SOCKET_NAME);
+    unlink(SOCKET_NAME); //In case the program exited inadvertently on the last run, remove the socket.
     
     /* master socket for accepting connections from client */
     connection_socket = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -332,7 +319,7 @@ int main() {
     
     signal(SIGINT, signal_handler);  //register signal handlers
     
-    /* The server continuously checks for new client connections, monitors existing connections (i.e. incoming messages and inactive connections, modifies the routing table if need be, and broadcasts any changes to all client processes. */
+    /* The server continuously checks for new client connections, monitors existing connections (i.e. incoming messages and inactive connections, modifies the routing table or MAC list if need be, and broadcasts any changes to clients. */
     while (1) {
         char op[OP_LEN];
         sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
@@ -363,15 +350,15 @@ int main() {
             update_new_client(data_socket, L3, op, sync_msg);
             update_new_client(data_socket, L2, op, sync_msg);
         }
-        else if(FD_ISSET(0, &readfds)){ // update from network admin via stdin
+        else if(FD_ISSET(0, &readfds)){ // server stdin
             ret = read(0, op, OP_LEN - 1);
+            
             op[strcspn(op, "\r\n")] = 0; // flush new line
             if (ret == -1) {
                 perror("read");
                 return 1;
             }
             op[ret] = 0;
-            
             
             if (!create_sync_message(op, sync_msg, 0)) {
                 // update server's tables
@@ -386,7 +373,7 @@ int main() {
 
                 /* Notify existing clients of changes */
                 int i, comm_socket_fd;
-                for (i = 2; i < MAX_CLIENTS; i++) {
+                for (i = 2; i < MAX_CLIENTS; i++) { // start at 2 since 0 and 1 are for server's stdin and stdout
                     comm_socket_fd = monitored_fd_set[i];
                     if (comm_socket_fd != -1) {
                         write(comm_socket_fd, sync_msg, sizeof(sync_msg_t));
@@ -404,7 +391,7 @@ int main() {
                     int comm_socket_fd = monitored_fd_set[i];
                     
                     ret = read(comm_socket_fd, &done, sizeof(int));
-                    if (done == 1) {
+                    if (done == 1) { // this client is disconnecting
                         close(comm_socket_fd);
                         remove_from_monitored_fd_set(comm_socket_fd);
                     }

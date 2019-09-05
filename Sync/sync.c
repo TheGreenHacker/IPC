@@ -6,12 +6,8 @@
 
 #include "../DLL/dll.h"
 #include "sync.h"
-/*
-#include "../Mac-List/mac-list.h"
-#include "../Routing-Table/routing-table.h"
- */
 
-
+/* Makes any changes to a routing table or mac list based on the instructions encoded in sync_msg. */
 void process_sync_mesg(dll_t *dll, sync_msg_t *sync_msg) {
     dll_node_t *node;
     if (sync_msg->l_code == L3) {

@@ -31,4 +31,4 @@ shm_ip:
 	$(CC) $(CFLAGS) -c shm_ip.c -o shm_ip.o
 
 clean:
-	rm -f client server DLL/dll.o Mac-List/mac-list.o Routing-Table/routing-table.o
+	rm -f client server DLL/dll.o Mac-List/mac-list.o Routing-Table/routing-table.o shm_ip.o

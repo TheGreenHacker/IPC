@@ -3,8 +3,6 @@
 
 #define MAC_ADDR_LEN 18
 
-
-
 typedef struct dll_ dll_t;
 typedef struct dll_node_ dll_node_t;
 

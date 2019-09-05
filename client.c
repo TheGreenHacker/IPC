@@ -16,8 +16,10 @@
 #include "Sync/sync.h"
 
 int data_socket;
-int loop = 1;
-int disconnect = 1;
+int loop = 1; // indicates if server is still up and running
+int disconnect = 1; // indicates to server that client wants to disconnect
+
+/* Client's copies of network data structures */
 dll_t *routing_table;
 dll_t *mac_list;
 
@@ -35,7 +37,7 @@ void signal_handler(int signal_num)
     }
 }
 
-/* Optionally, display contents of a data structure (routing table or MAC list). */
+/* Optionally, display contents of a data stucture (routing table or MAC list). */
 void display_ds(int synchronized) {
     char c, flush;
     switch (synchronized) {
@@ -86,29 +88,25 @@ int main() {
     
     signal(SIGINT, signal_handler);  //register signal handler
     
-    /* Continously wait for updates from the routing manager server regarding table contents, stability of
-     updates to the table, and server status. */
+    /* Continously wait for updates to routing table and MAC list from the server regarding table contents and server state. */
     while (loop) {
         int synchronized;
         char ip[IP_ADDR_LEN];
         sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
         memset(ip, 0, IP_ADDR_LEN);
         
-        //printf("Waiting for sync mesg\n");
         ret = read(data_socket, sync_msg, sizeof(sync_msg_t));
         if (ret == -1) {
             perror("read");
             break;
         }
         
-        //printf("Is the table stable?\n");
         ret = read(data_socket, &synchronized, sizeof(int));
         if (ret == -1) {
             perror("read");
             break;
         }
         
-        //printf("Server you still there?\n");
         ret = read(data_socket, &loop, sizeof(int));
         if (ret == -1) {
             perror("read");

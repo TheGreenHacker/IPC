@@ -12,16 +12,12 @@
 #define ML 2
 
 typedef struct dll_ dll_t;
-/*
-typedef struct routing_table_entry_ routing_table_entry_t;
-typedef struct mac_list_entry_ mac_list_entry_t;
- */
 
 typedef enum {
     CREATE,
     UPDATE,
     DELETE,
-    NONE
+    NONE  // indicates that all current updates from server have been processed
 } OPCODE;
 
 /* Specifies whether we're dealing with L3 (IP routing table) or L2 (MAC address list) */

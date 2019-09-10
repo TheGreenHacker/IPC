@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -33,12 +34,15 @@ dll_t *mac_list;
 
 /*An array of File descriptors which the server process is maintaining in order to talk with the connected clients. Master skt FD is also a member of this array*/
 int monitored_fd_set[MAX_CLIENTS];
+pid_t client_pid_set[MAX_CLIENTS]; // array of client process id's
 
-/*Remove all the FDs, if any, from the the array*/
-void intitiaze_monitor_fd_set(){
+/*Remove all the FDs and client pid's, if any, from the the array*/
+void intitiaze_monitor_fd_and_client_pid_set(){
     int i = 0;
-    for(; i < MAX_CLIENTS; i++)
+    for(; i < MAX_CLIENTS; i++) {
         monitored_fd_set[i] = -1;
+        client_pid_set[i] = -1;
+    }
 }
 
 /*Add a new FD to the monitored_fd_set array*/
@@ -52,6 +56,17 @@ void add_to_monitored_fd_set(int skt_fd){
     }
 }
 
+/*Add a new pid to the client_pid_set array*/
+void add_to_client_pid_set(int pid){
+    int i = 0;
+    for(; i < MAX_CLIENTS; i++){
+        if(client_pid_set[i] != -1)
+            continue;
+        client_pid_set[i] = pid;
+        break;
+    }
+}
+
 /*Remove the FD from monitored_fd_set array*/
 void remove_from_monitored_fd_set(int skt_fd){
     int i = 0;
@@ -59,6 +74,17 @@ void remove_from_monitored_fd_set(int skt_fd){
         if(monitored_fd_set[i] != skt_fd)
             continue;
         monitored_fd_set[i] = -1;
+        break;
+    }
+}
+
+/*Remove the pid from client_pid_set array*/
+void remove_from_client_pid_set(int pid){
+    int i = 0;
+    for(; i < MAX_CLIENTS; i++){
+        if(monitored_fd_set[i] != pid)
+            continue;
+        client_pid_set[i] = -1;
         break;
     }
 }
@@ -139,6 +165,19 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
                 sync_msg->op_code = NONE;
                 display_routing_table(routing_table);
                 display_mac_list(mac_list);
+                return 0;
+            case 'F':
+                sync_msg->op_code = NONE;
+                
+                int i;
+                for (i = 0; i < MAX_CLIENTS; i++) {
+                    if (kill(client_pid_set[i], SIGUSR1) == -1) {
+                        perror("kill");
+                    }
+                }
+                
+                deinit_dll(routing_table);
+                deinit_dll(mac_list);
                 return 0;
             default:
                 fprintf(stderr, "Invalid operation: unknown op code\n");
@@ -281,7 +320,7 @@ int main() {
     routing_table = init_dll();
     mac_list = init_dll();
     
-    intitiaze_monitor_fd_set();
+    intitiaze_monitor_fd_and_client_pid_set();
     add_to_monitored_fd_set(0);
     
     unlink(SOCKET_NAME); //In case the program exited inadvertently on the last run, remove the socket.
@@ -290,7 +329,7 @@ int main() {
     connection_socket = socket(AF_UNIX, SOCK_STREAM, 0);
     if (connection_socket == -1) {
         perror("socket");
-        exit(EXIT_FAILURE);
+        exit(1);
     }
     
     /*initialize*/
@@ -305,14 +344,14 @@ int main() {
                sizeof(struct sockaddr_un));
     if (ret == -1) {
         perror("bind");
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 
     /* Prepare for accepting connections.  */
     ret = listen(connection_socket, 20);
     if (ret == -1) {
         perror("listen");
-        exit(EXIT_FAILURE);
+        exit(1);
     }
     
     add_to_monitored_fd_set(connection_socket);
@@ -334,6 +373,7 @@ int main() {
         printf("4.CREATE <MAC>\n");
         printf("5.DELETE <MAC>\n");
         printf("6.SHOW\n");
+        printf("7.FLUSH\n");
         
         select(get_max_fd() + 1, &readfds, NULL, NULL, NULL);  /* Wait for incoming connections. */
 
@@ -345,7 +385,15 @@ int main() {
                 exit(1);
             }
             
+            pid_t pid;
+            if (read(data_socket, &pid, sizeof(pid_t)) == -1) {
+                perror("read");
+                exit(1);
+            }
+            
             add_to_monitored_fd_set(data_socket);
+            add_to_client_pid_set(pid);
+            
             
             update_new_client(data_socket, L3, op, sync_msg);
             update_new_client(data_socket, L2, op, sync_msg);

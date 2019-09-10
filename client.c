@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
 
@@ -24,16 +25,18 @@ dll_t *routing_table;
 dll_t *mac_list;
 
 /* Break out of main infinite loop and inform server of intent to disconnect. */
-void signal_handler(int signal_num)
-{
-    if(signal_num == SIGINT)
-    {
+void signal_handler(int signal_num) {
+    if (signal_num == SIGINT) {
         loop = 0;
         write(data_socket, &disconnect, sizeof(int));
         close(data_socket);
         deinit_dll(routing_table);
         deinit_dll(mac_list);
         exit(0);
+    }
+    else if (signal_num == SIGUSR1) {
+        deinit_dll(routing_table);
+        deinit_dll(mac_list);
     }
 }
 
@@ -64,7 +67,6 @@ void display_ds(int synchronized) {
 
 int main() {
     struct sockaddr_un addr;
-    int ret;
     
     routing_table = init_dll();
     mac_list = init_dll();
@@ -79,12 +81,14 @@ int main() {
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, SOCKET_NAME, sizeof(addr.sun_path) - 1);
     
-    ret = connect (data_socket, (const struct sockaddr *) &addr,
-                   sizeof(struct sockaddr_un));
-    if (ret == -1) {
+    if (connect(data_socket, (const struct sockaddr *) &addr,
+                sizeof(struct sockaddr_un)) == -1) {
         fprintf(stderr, "The server is down.\n");
         exit(1);
     }
+    
+    pid_t pid = getpid();
+    write(data_socket, &pid, sizeof(pid_t)); // send server client's process id
     
     signal(SIGINT, signal_handler);  //register signal handler
     
@@ -95,20 +99,17 @@ int main() {
         sync_msg_t *sync_msg = calloc(1, sizeof(sync_msg_t));
         memset(ip, 0, IP_ADDR_LEN);
         
-        ret = read(data_socket, sync_msg, sizeof(sync_msg_t));
-        if (ret == -1) {
+        if (read(data_socket, sync_msg, sizeof(sync_msg_t)) == -1) {
             perror("read");
             break;
         }
         
-        ret = read(data_socket, &synchronized, sizeof(int));
-        if (ret == -1) {
+        if (read(data_socket, &synchronized, sizeof(int)) == -1) {
             perror("read");
             break;
         }
         
-        ret = read(data_socket, &loop, sizeof(int));
-        if (ret == -1) {
+        if (read(data_socket, &loop, sizeof(int)) == -1) {
             perror("read");
             break;
         }

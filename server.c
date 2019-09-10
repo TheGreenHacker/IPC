@@ -100,6 +100,17 @@ void refresh_fd_set(fd_set *fd_set_ptr){
     }
 }
 
+/* Inform clients to flush their routing tables and mac lists*/
+void flush_clients() {
+    int i;
+    for(i = 0; i < MAX_CLIENTS; i++) {
+        int pid = client_pid_set[i];
+        if (pid != -1) {
+            kill(pid, SIGUSR1);
+        }
+    }
+}
+
 /* Helper function for isValidMask */
 int digits_only(const char *s)
 {
@@ -124,6 +135,8 @@ int isValidMask(const char *mask) {
 
 /* Checks if a given string represents a valid mac address in the format XX:XX:XX:XX:XX:XX, where each X represents a hexidecimal digit 0-9 or a-f */
 int isValidMAC(const char *addr) {
+    if(!addr)
+        return 0;       
     int i;
     for(i = 0; i < MAC_ADDR_LEN - 1; i++) {
         if(i % 3 != 2 && !isxdigit(addr[i]))
@@ -169,15 +182,12 @@ int create_sync_message(char *operation, sync_msg_t *sync_msg, int silent) {
             case 'F':
                 sync_msg->op_code = NONE;
                 
-                int i;
-                for (i = 0; i < MAX_CLIENTS; i++) {
-                    if (kill(client_pid_set[i], SIGUSR1) == -1) {
-                        perror("kill");
-                    }
-                }
-                
+                flush_clients();               
                 deinit_dll(routing_table);
                 deinit_dll(mac_list);
+
+                routing_table = init_dll();
+                mac_list = init_dll();
                 return 0;
             default:
                 fprintf(stderr, "Invalid operation: unknown op code\n");

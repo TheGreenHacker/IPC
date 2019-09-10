@@ -37,6 +37,9 @@ void signal_handler(int signal_num) {
     else if (signal_num == SIGUSR1) {
         deinit_dll(routing_table);
         deinit_dll(mac_list);
+
+        routing_table = init_dll();
+        mac_list = init_dll();
     }
 }
 
@@ -91,7 +94,7 @@ int main() {
     write(data_socket, &pid, sizeof(pid_t)); // send server client's process id
     
     signal(SIGINT, signal_handler);  //register signal handler
-    
+    signal(SIGUSR1, signal_handler);    
     /* Continously wait for updates to routing table and MAC list from the server regarding table contents and server state. */
     while (loop) {
         int synchronized;

@@ -29,6 +29,7 @@ reflect all such changes
 * When a client shuts down via CTRL-C, the server continues running smoothly
 * When the server shuts down via CTRL-C, all clients shut down cleanly
 * All routing table entries are uniquely identified by the dest and mask fields and mac list entries identified by mac field
+* The server can flush routing table and mac list at any time, emptying the contents of both data structures, and informs clients to do the same by sending them a USRSIG1 signal.
 
 ## Resources
 * Udemy's "Linux Inter Process Communication (IPC) from Scratch" course by Abhishek Sagar

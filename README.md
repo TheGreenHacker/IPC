@@ -1,4 +1,4 @@
-# Network Manager
+# IPC
 The purpose of this project is to explore the application of various IPC techniques in C to implementing Linux system applications. The server process maintains and updates two network data structures: a L3 IPv4 Routing Table and L2 MAC list. Changes to the routing table and MAC List are synchronized to the client via UNIX domain sockets. The clients then use the MAC addresses as keys to look up the corresponding IP address stored in a shared memory region created by the server. Note that while the client, for demonstration purposes simply only prints the data, the concept of data synchronization using IPC mechanisms can easily be extended to real-life network administration tasks as the Routing Table and ARP Table (MAC list + shared memory IP) contains necessary info for other application functionality, such as firewalls and best-path routing algorithm computations. 
 
 ## Routing Entry Fields

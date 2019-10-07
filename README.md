@@ -35,4 +35,4 @@ reflect all such changes
 * Udemy's "Linux Inter Process Communication (IPC) from Scratch" course by Abhishek Sagar
 
 ## Other Notes
-When client shuts down on Mac OS or Windows, server SEG FAULTS. So please, only run on Linux systems. Also, -lrt is not recognized by Mac OS clang compiler.
+When client shuts down on Mac OS or Windows, server SEG FAULTS. So please, only run on Linux systems. Also, -lrt is not recognized by clang.
